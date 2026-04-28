@@ -1,0 +1,22 @@
+# Unreal Engine
+DerivedDataCache/
+Intermediate/
+Saved/
+Binaries/
+.vs/
+.idea/
+*.sln
+*.suo
+*.sdf
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.user
+*.DotSettings.user
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
