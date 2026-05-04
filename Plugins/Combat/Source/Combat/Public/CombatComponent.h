@@ -49,12 +49,16 @@ private:
 	/** 是否正在瞄准（同步到所有客户端） */
 	UPROPERTY(Replicated)
 	bool bIsAiming;
+	
+	/** 是否正在开火（同步到所有客户端） */
+	UPROPERTY(Replicated)
+	bool bIsFire;
 
 	/** 基础移动速度 */
-	UPROPERTY(EditDefaultsOnly, meta=(AllowPrivateAccess=true))
+	UPROPERTY(EditDefaultsOnly)
 	float BaseWalkSpeed;
 	/** 瞄准移动速度 */
-	UPROPERTY(EditDefaultsOnly, meta=(AllowPrivateAccess=true))
+	UPROPERTY(EditDefaultsOnly)
 	float AimWalkSpeed;
 	
 	/**
@@ -64,6 +68,10 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeapon)
 	TObjectPtr<AWeapon> EquippedWeapon;
 
+	/** 开火动画蒙太奇 */
+	UPROPERTY(EditDefaultsOnly, meta=(AllowPrivateAccess=true))
+	TObjectPtr<UAnimMontage> FireMontage;
+	
 	/**
 	 * 当前重叠（可拾取）的武器
 	 * 同步 + 变化时自动调用 OnRep_OverlappingWeapon
@@ -74,6 +82,8 @@ private:
 	/** 执行武器装备（服务器权威调用） */
 	void EquipWeapon(AWeapon* Weapon, const FName& SocketName);
 
+	/** 播放开火蒙太奇 */
+	void PlayFireMontage();
 public:
 	/** 获取瞄准移动速度 */
 	float GetAimWalkSpeed() const {return AimWalkSpeed;}
@@ -85,11 +95,14 @@ public:
 	void SetOverlappingWeapon(AWeapon* Weapon);
 
 	/** 设置瞄准状态（本地客户端调用） */
-	void SetAiming(const bool bInIsAiming);
+	void AimButtonPressed(const bool& bPressed);
 
 	/** 装备按键按下时调用（本地输入入口） */
 	void EquipButtonPressed(const FName& SocketName);
 
+	/** 开火按键按下时调用 */
+	void FireButtonPressed(const bool& bPressed);
+	
 private:
 
 	/** 服务器同步回调：当EquippedWeapon被同步到客户端时调用 */
@@ -99,12 +112,21 @@ private:
 	/** 服务器同步回调：当OverlappingWeapon被同步到客户端时调用 */
 	UFUNCTION()
 	void OnRep_OverlappingWeapon(const AWeapon* OldOverlappingWeapon );
-
+	
 	/** 服务器可靠调用，服务器装备武器的实际执行函数，本地不能直接装备，必须发给服务器执行*/
 	UFUNCTION(Server, Reliable)
 	void ServerEquipWeapon(AWeapon* Weapon,const FName& SocketName);
 
-	// 服务器可靠调用，设置瞄准状态的实际执行函数
+	/** 服务器可靠调用，设置瞄准状态的实际执行函数 */
 	UFUNCTION(Server, Reliable)
-	void ServerSetAiming(const bool bInIsAiming);
+	void ServerAimButtonPressed(const bool bPressed);
+
+	/** 服务器可靠调用，设置开火状态的实际执行函数 */
+	UFUNCTION(Server, Reliable)
+	void ServerFireButtonPressed(const bool bPressed);
+	
+	/** 通知所有客户端播放开火动作、特效 */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastFire();
+	
 };

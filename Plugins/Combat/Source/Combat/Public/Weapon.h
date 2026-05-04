@@ -25,6 +25,8 @@ public:
 	
 	USkeletalMeshComponent* GetWeaponSkeletalMesh() {return WeaponSkeletalMesh;}
 	
+	void Fire() const;
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -39,6 +41,9 @@ protected:
 private:
 	UPROPERTY(VisibleAnywhere, Category="Weapon")
 	TObjectPtr<USkeletalMeshComponent> WeaponSkeletalMesh;
+	
+	UPROPERTY(EditDefaultsOnly, Category="WeaponAnimation", meta = (AllowPrivateAccess=true))
+	TObjectPtr<UAnimationAsset> FireAnimation;
 	
 	UPROPERTY(VisibleAnywhere, Category="Weapon")
 	TObjectPtr<USphereComponent> AreaShape;

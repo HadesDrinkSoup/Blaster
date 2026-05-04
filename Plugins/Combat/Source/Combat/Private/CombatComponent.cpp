@@ -16,7 +16,7 @@ UCombatComponent::UCombatComponent()
 	// 开启组件默认网络复制（多人游戏必备）
 	SetIsReplicatedByDefault(true);
 	BaseWalkSpeed = 600.f;
-	AimWalkSpeed = 300.f;
+	AimWalkSpeed = 200.f;
 }
 
 // 游戏开始时初始化
@@ -77,6 +77,19 @@ void UCombatComponent::EquipWeapon(AWeapon* Weapon, const FName& SocketName)
 	
 }
 
+void UCombatComponent::PlayFireMontage()
+{
+	if (!EquippedWeapon) return;
+	const TObjectPtr<UAnimInstance> AnimInstance = OwnerCharacter->GetMesh()->GetAnimInstance();
+	if (AnimInstance && FireMontage)
+	{
+		AnimInstance->Montage_Play(FireMontage);
+		const bool IsCrouching = OwnerCharacter->GetCharacterMovement()->IsCrouching();
+		const FName SectionName = IsCrouching ? FName("CrouchFire") : FName("StandFire");
+		AnimInstance->Montage_JumpToSection(SectionName);
+	}
+}
+
 /**
  * 设置当前重叠的武器（本地客户端调用）
  * @param Weapon 重叠的武器对象
@@ -103,18 +116,18 @@ void UCombatComponent::SetOverlappingWeapon(AWeapon* Weapon)
 
 /**
  * 设置瞄准状态（本地客户端调用）
- * @param bInIsAiming true=开始瞄准 / false=停止瞄准
+ * @param bPressed true=开始瞄准 / false=停止瞄准
  */
-void UCombatComponent::SetAiming(const bool bInIsAiming)
+void UCombatComponent::AimButtonPressed(const bool& bPressed)
 {
 	/**
 	 * 客户端预测 + 服务器确认
 	 * 瞄准：无副作用、可预测，客户端先行，服务器确认，本地和 RPC 同时调用
 	 */
 	// 本地立即设置瞄准状态（提升手感）
-	bIsAiming = bInIsAiming;
+	bIsAiming = bPressed;
 	// 发送请求给服务器同步状态
-	ServerSetAiming(bInIsAiming);
+	ServerAimButtonPressed(bPressed);
 	if (OwnerCharacter)
 	{
 		OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed = bIsAiming ? AimWalkSpeed : BaseWalkSpeed;
@@ -145,6 +158,15 @@ void UCombatComponent::EquipButtonPressed(const FName& SocketName)
 	else
 	{
 		ServerEquipWeapon(OverlappingWeapon, SocketName);
+	}
+}
+
+void UCombatComponent::FireButtonPressed(const bool& bPressed)
+{
+	bIsFire = bPressed;
+	if (bPressed)
+	{
+		ServerFireButtonPressed(bPressed);
 	}
 }
 
@@ -182,6 +204,7 @@ void UCombatComponent::OnRep_OverlappingWeapon(const AWeapon* OldOverlappingWeap
 	}
 }
 
+
 /**
  * 服务器装备武器的实际执行函数
  * 本地不能直接装备，必须发给服务器执行
@@ -196,13 +219,35 @@ void UCombatComponent::ServerEquipWeapon_Implementation(AWeapon* Weapon, const F
 /**
  * 设置瞄准状态
  * 瞄准状态必须由服务器权威同步
- * @param bInIsAiming 瞄准状态
+ * @param bPressed 瞄准按键是否按下
  */
-void UCombatComponent::ServerSetAiming_Implementation(const bool bInIsAiming)
+void UCombatComponent::ServerAimButtonPressed_Implementation(const bool bPressed)
 {
-	bIsAiming = bInIsAiming;
+	bIsAiming = bPressed;
 	if (OwnerCharacter)
 	{
 		OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed = bIsAiming ? AimWalkSpeed : BaseWalkSpeed;
 	}
+}
+
+/**
+ * 设置开火状态
+ * @param bPressed 开火按键是否按下
+ */
+void UCombatComponent::ServerFireButtonPressed_Implementation(const bool bPressed)
+{
+	if (OwnerCharacter && EquippedWeapon && bIsAiming)
+	{
+		MulticastFire();
+	}
+}
+
+/**
+ * 服务器向所有端同步开火动画、特效
+ * 画蒙太奇 (PlayFireMontage) 是纯本地操作，播放后不会自动复制到客户端
+ */
+void UCombatComponent::MulticastFire_Implementation()
+{
+	PlayFireMontage();
+	EquippedWeapon->Fire(); // 注意：这里 Fire 是纯表现（特效、音效）
 }

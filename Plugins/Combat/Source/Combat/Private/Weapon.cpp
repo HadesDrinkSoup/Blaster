@@ -58,6 +58,12 @@ void AWeapon::ShowPickUpWidget(const bool bShowWidget) const
 	}
 }
 
+void AWeapon::Fire() const
+{
+	if (FireAnimation)
+		WeaponSkeletalMesh->PlayAnimation(FireAnimation,false);
+}
+
 void AWeapon::BeginPlay()
 {
 	Super::BeginPlay();

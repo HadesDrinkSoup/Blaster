@@ -29,7 +29,7 @@ public:
     // 构造函数：初始化组件、移动、碰撞等基础属性
     ABlasterCharacter();
     
-    // 武器接口实现
+    // 武器接口实现======================================
     /** 判断当前角色是否装备了武器 */
     virtual bool IsEquippedWeapon() const override;
 
@@ -39,7 +39,7 @@ public:
     /** 获取已装备的武器 */
     virtual AWeapon*  GetEquippedWeapon() const override;
     
-    //瞄准偏移
+    //瞄准偏移===========================================
     float GetAimOffsetYaw() const {return AimOffsetYaw;}
     float GetAimOffsetPitch() const {return AimOffsetPitch;}
     
@@ -55,7 +55,7 @@ protected:
     /** 绑定输入：按键、鼠标、摇杆映射到函数 */
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
     
-    // 角色行为：移动、视角、跳跃
+    // 角色行为==================================
     /** 执行移动（根据左右、前后输入） */
     virtual void DoMove(float Right, float Forward);
 
@@ -63,7 +63,7 @@ protected:
     virtual void DoLook(float Yaw, float Pitch);
 
     /** 瞄准偏移 */
-    void AimOffset(float DeltaTime);
+    void AimOffset();
     
     /** 开始跳跃 */
     virtual void DoJumpStart();
@@ -74,7 +74,7 @@ protected:
     /** 切换下蹲/站立 */
     void Crouched();
     
-    // 武器与瞄准
+    // 武器与瞄准================================
     /** 装备/切换武器 */
     void EquipWeapon();
 
@@ -84,6 +84,12 @@ protected:
     /** 停止瞄准 */
     void StopAim();
 
+	/** 开始开火 */
+	void StartFire();
+	
+	/** 停止开火 */
+	void StopFire();
+	
     /** 更新向后移动的速度 */
     void UpdateWalkSpeed(bool bBackward, bool bHasWeapon) const;
     
@@ -91,7 +97,7 @@ protected:
     UFUNCTION(Server, Reliable)
     void Server_UpdateWalkSpeed(const bool bBackward, const bool bHasWeapon);
 private:
-    // 组件
+    // 组件===============================
     /** 弹簧臂组件 */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta=(AllowPrivateAccess = "true"))
     TObjectPtr<USpringArmComponent> SpringArm;
@@ -107,15 +113,25 @@ private:
     /** 战斗组件：管理装备、切换、开火、瞄准 */
     UPROPERTY(Replicated, VisibleAnywhere, Category = "CombatComponent")
     TObjectPtr<UCombatComponent> CombatComponent;
-
+	
+	// 属性值============================
 	/** 默认摄像机偏移 */
 	FVector DefaultSocketOffset;
+	
+	/** 瞄准偏移 */
+	UPROPERTY(Replicated)
+	float AimOffsetYaw;
+	UPROPERTY(Replicated)
+	float AimOffsetPitch;
+    
+	/** 当前瞄准方向与初始瞄准方向的旋转差值 */
+	FRotator StartingAimRotation;
 	
 	/** 瞄准时摄像机偏移目标值 */
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
 	FVector ZoomedSocketOffset = FVector(0.f, 60.f, 50.f);
 	
-    // 输入回调函数
+    // 输入回调函数============================
     /**
      * 移动输入回调：WASD触发
      * @param Value 输入的二维向量（X=左右，Y=前后）
@@ -128,6 +144,7 @@ private:
      */
     void Look(const FInputActionValue& Value);
     
+	
     // 输入资源（在编辑器中指定）
     /** 默认输入映射上下文：绑定整套操作规则 */
     UPROPERTY(EditDefaultsOnly, Category="Input", meta=(AllowPrivateAccess = "true"))
@@ -157,8 +174,7 @@ private:
     UPROPERTY(EditDefaultsOnly, Category="Input", meta=(AllowPrivateAccess = "true"))
     UInputAction* AimAction;
     
-    float AimOffsetYaw;
-    float AimOffsetPitch;
-    
-    FRotator StartingAimRotation;
+	/** 开火输入动作 */
+	UPROPERTY(EditDefaultsOnly, Category="Input", meta=(AllowPrivateAccess = "true"))
+	UInputAction* FireAction;
 };

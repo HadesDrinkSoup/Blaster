@@ -69,7 +69,7 @@ void ABlasterCharacter::BeginPlay()
 void ABlasterCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	AimOffset(DeltaTime);
+	AimOffset();
 
 	// 瞄准时平滑调整摄像机
 	if (SpringArm)
@@ -89,6 +89,8 @@ void ABlasterCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 
 	// 同步武器组件到所有客户端
 	DOREPLIFETIME(ABlasterCharacter, CombatComponent);
+	DOREPLIFETIME(ABlasterCharacter, AimOffsetYaw);
+	DOREPLIFETIME(ABlasterCharacter, AimOffsetPitch);
 }
 
 // 绑定玩家输入（按键、鼠标、摇杆）
@@ -112,9 +114,13 @@ void ABlasterCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		// 切换武器：按下执行装备
 		EnhancedInputComponent->BindAction(EquipWeaponAction, ETriggerEvent::Started, this, &ABlasterCharacter::EquipWeapon);
 		
-		// 瞄准：按下开镜 / 松开关镜
+		// 瞄准：按下瞄准 / 松开瞄准
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &ABlasterCharacter::StartAim);
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this,  &ABlasterCharacter::StopAim);
+		
+		//开火：按下开火 / 松开停止开火
+		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ABlasterCharacter::StartFire);
+		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &ABlasterCharacter::StopFire);
 	}
 }
 
@@ -162,7 +168,7 @@ void ABlasterCharacter::DoLook(const float Yaw, const float Pitch)
  * 站立不动时：角色身体不随视角旋转，上半身做瞄准偏移
  * 移动/跳跃时：角色身体随视角旋转，不使用瞄准偏移
  */
-void ABlasterCharacter::AimOffset(float DeltaTime)
+void ABlasterCharacter::AimOffset()
 {	
 	if (CombatComponent && !CombatComponent->IsWeaponEquipped()) return;
 
@@ -174,41 +180,44 @@ void ABlasterCharacter::AimOffset(float DeltaTime)
 	// 判断角色是否在空中（跳跃/坠落）
 	const bool bIsAir = GetCharacterMovement()->IsFalling();
 
-	// 情况1：角色静止站立 + 不在空中 → 启用瞄准偏移，身体不跟随视角旋转
-	if (GroundSpeed <= 10.f && !bIsAir)
+	if (HasAuthority() || IsLocallyControlled())
 	{
-		// 获取当前控制器瞄准的Yaw旋转（忽略Pitch/Roll）
-		const FRotator CurrentAimRotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
-		// 计算当前瞄准方向与初始瞄准方向的旋转差值
-		const FRotator DeltaAimRotation = UKismetMathLibrary::NormalizedDeltaRotator(CurrentAimRotation, StartingAimRotation);
-		// 将差值赋值给瞄准偏移Yaw，控制上半身动画
-		AimOffsetYaw = DeltaAimRotation.Yaw;
-		// 禁用角色Yaw轴跟随控制器旋转（身体不动，上半身动）
-		bUseControllerRotationYaw = false;
-	}
-	// 情况2：角色移动 或 在空中 → 关闭瞄准偏移，身体跟随视角旋转
-	else
-	{
-		// 重置初始瞄准旋转为当前视角
-		StartingAimRotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
-		// 重置Yaw瞄准偏移
-		AimOffsetYaw = 0.f;
-		// 启用角色Yaw轴跟随控制器旋转（身体跟随视角）
-		bUseControllerRotationYaw = true;
-	}
+		// 情况1：角色静止站立 + 不在空中 → 启用瞄准偏移，身体不跟随视角旋转
+		if (GroundSpeed <= 10.f && !bIsAir)
+		{
+			// 获取当前控制器瞄准的Yaw旋转（忽略Pitch/Roll）
+			const FRotator CurrentAimRotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
+			// 计算当前瞄准方向与初始瞄准方向的旋转差值
+			const FRotator DeltaAimRotation = UKismetMathLibrary::NormalizedDeltaRotator(CurrentAimRotation, StartingAimRotation);
+			// 将差值赋值给瞄准偏移Yaw，控制上半身动画
+			AimOffsetYaw = DeltaAimRotation.Yaw;
+			// 禁用角色Yaw轴跟随控制器旋转（身体不动，上半身动）
+			bUseControllerRotationYaw = false;
+		}
+		// 情况2：角色移动 或 在空中 → 关闭瞄准偏移，身体跟随视角旋转
+		else
+		{
+			// 重置初始瞄准旋转为当前视角
+			StartingAimRotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
+			// 重置Yaw瞄准偏移
+			AimOffsetYaw = 0.f;
+			// 启用角色Yaw轴跟随控制器旋转（身体跟随视角）
+			bUseControllerRotationYaw = true;
+		}
 
-	// 获取控制器瞄准Pitch值，用于垂直方向瞄准偏移
-	AimOffsetPitch = GetBaseAimRotation().Pitch;
+		// 获取控制器瞄准Pitch值，用于垂直方向瞄准偏移
+		AimOffsetPitch = GetBaseAimRotation().Pitch;
 
-	// 非本地控制角色（服务器/其他客户端）：修正Pitch角度范围（270~360 → -90~0）
-	if (AimOffsetPitch > 90.f && !IsLocallyControlled())
-	{
-		// 输入角度范围：UE网络传输中俯视会变成270~360
-		const FVector2D InRange(270.f, 360.f);
-		// 输出角度范围：映射为动画可用的-90~0度
-		const FVector2D OutRange(-90.f, 0.f);
-		// 角度映射并 clamped 限制范围
-		AimOffsetPitch = FMath::GetMappedRangeValueClamped(InRange, OutRange, AimOffsetPitch);
+		// 非本地控制角色（服务器/其他客户端）：修正Pitch角度范围（270~360 → -90~0）
+		if (AimOffsetPitch > 90.f)
+		{
+			// 输入角度范围：UE网络传输中俯视会变成270~360
+			const FVector2D InRange(270.f, 360.f);
+			// 输出角度范围：映射为动画可用的-90~0度
+			const FVector2D OutRange(-90.f, 0.f);
+			// 角度映射并 clamped 限制范围
+			AimOffsetPitch = FMath::GetMappedRangeValueClamped(InRange, OutRange, AimOffsetPitch);
+		}
 	}
 }
 
@@ -280,13 +289,27 @@ void ABlasterCharacter::EquipWeapon()
 // 开始瞄准
 void ABlasterCharacter::StartAim()
 {
-	CombatComponent->SetAiming(true);
+	if (CombatComponent)
+		CombatComponent->AimButtonPressed(true);
 }
 
 // 停止瞄准
 void ABlasterCharacter::StopAim()
 {
-	CombatComponent->SetAiming(false);
+	if (CombatComponent)
+		CombatComponent->AimButtonPressed(false);
+}
+
+void ABlasterCharacter::StartFire()
+{
+	if (CombatComponent)
+		CombatComponent->FireButtonPressed(true);
+}
+
+void ABlasterCharacter::StopFire()
+{
+	if (CombatComponent)
+		CombatComponent->FireButtonPressed(false);
 }
 
 /**
